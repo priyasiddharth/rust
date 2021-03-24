@@ -11,7 +11,7 @@ edition = "2018"
 [lib]
 name = "std"
 path = "lib.rs"
-crate-type = ["dylib", "rlib"]
+crate-type = ["rlib"]
 
 [dependencies]
 alloc = { path = "../liballoc" }
