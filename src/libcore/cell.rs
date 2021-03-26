@@ -194,6 +194,7 @@ use crate::marker::Unsize;
 use crate::mem;
 use crate::ops::{CoerceUnsized, Deref, DerefMut};
 use crate::ptr;
+use crate::cell::State::{WRITING, READING};
 
 /// A mutable memory location.
 ///
@@ -632,14 +633,38 @@ impl Display for BorrowMutError {
 type BorrowFlag = isize;
 const UNUSED: BorrowFlag = 0;
 
+#[stable(feature = "rust1", since = "1.0.0")]
 #[inline(always)]
-fn is_writing(x: BorrowFlag) -> bool {
+pub fn is_writing(x: BorrowFlag) -> bool {
     x < UNUSED
 }
 
+#[stable(feature = "rust1", since = "1.0.0")]
 #[inline(always)]
-fn is_reading(x: BorrowFlag) -> bool {
+pub fn is_reading(x: BorrowFlag) -> bool {
     x > UNUSED
+}
+
+#[stable(feature = "rust1", since = "1.0.0")]
+#[inline(always)]
+pub fn is_reader_limit_reached(x: BorrowFlag) -> bool {
+    x == BorrowFlag::max_value()
+}
+
+#[stable(feature = "rust1", since = "1.0.0")]
+pub fn is_unused(x: BorrowFlag) -> bool {
+    x == UNUSED
+}
+
+#[stable(feature = "rust1", since = "1.0.0")]
+#[derive(PartialEq)]
+pub enum State {
+    #[stable(feature = "rust1", since = "1.0.0")]
+    UNUSED,
+    #[stable(feature = "rust1", since = "1.0.0")]
+    READING,
+    #[stable(feature = "rust1", since = "1.0.0")]
+    WRITING,
 }
 
 impl<T> RefCell<T> {
@@ -657,6 +682,31 @@ impl<T> RefCell<T> {
     #[inline]
     pub const fn new(value: T) -> RefCell<T> {
         RefCell { value: UnsafeCell::new(value), borrow: Cell::new(UNUSED) }
+    }
+    
+    #[stable(feature = "rust1", since = "1.0.0")]
+    #[rustc_const_stable(feature = "const_refcell_new_with_flag", since = "1.32.0")]
+    #[inline]
+    // TODO: This function can likely be removed since get/set borrow state is enough.
+    pub const fn new_with_flag(value: T, borrow_flag: isize) -> RefCell<T> {
+        RefCell { value: UnsafeCell::new(value), borrow: Cell::new(borrow_flag) }
+    }
+
+    #[stable(feature = "rust1", since = "1.0.0")]
+    #[inline]
+    pub fn get_borrow_state(&self) -> State {
+        if is_writing(self.borrow.get()) {
+            return WRITING;
+        } else if is_reading(self.borrow.get()) {
+            return READING;
+        }
+        return State::UNUSED;
+    }
+
+    #[stable(feature = "rust1", since = "1.0.0")]
+    #[inline]
+    pub fn set_borrow_state(&self, borrow_flag: isize) {
+        self.borrow.set(borrow_flag);
     }
 
     /// Consumes the `RefCell`, returning the wrapped value.
